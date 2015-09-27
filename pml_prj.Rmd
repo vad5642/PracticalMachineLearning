@@ -1,0 +1,153 @@
+---
+title: "Coursera Practical Machine Learning Project"
+author: "Vadim Galenchik"
+date: "Saturday, Septenber 25, 2015"
+output: html_document
+---
+
+##Background and Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, we will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participant They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The five ways are exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). Only Class A corresponds to correct performance. The goal of this project is to predict the manner in which they did the exercise, i.e., Class A to E. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. The results were published at
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#wle_paper_section#ixzz3my7131jX
+
+##Data Processing
+
+###Import the data
+
+After loading of the R packages needed for analysis we download the training and testing data sets from the given URLs.
+```{r, echo=FALSE}
+library(caret)
+library(ggplot2)
+library(plyr)
+require(gbm)
+library(rattle) 
+library(rpart) 
+library(rpart.plot)
+library(randomForest) 
+library(repmis)
+```
+```{r, echo=TRUE}
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",  destfile = "pml-testing.csv")
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
+
+validation <- read.csv("pml-testing.csv")
+training <- read.csv("pml-training.csv")
+```
+###Find predictors
+
+Remove near zero covariates
+```{r, echo=TRUE}
+# remove near zero covariates
+nz <- nearZeroVar(training, saveMetrics = T)
+training <- training[, !nz$nzv]
+```
+
+Remove variables with more than 80% missing values
+```{r, echo=TRUE}
+# remove variables with more than 80% missing values
+check_missing <- function(x) sum(is.na(x) | x == "") > 0.8*nrow(training)
+nav <- sapply(training, check_missing)
+training <- training[, !nav]
+```
+Because of their nature variables "X" ,"user_name","raw_timestamp_part_1", 
+#"raw_timestamp_part_2",  "cvtd_timestamp", "num_window" cannnot be considered as predictors. So let's removw them.
+
+```{r, echo=TRUE}
+training <- training[, -c(1:6)]
+```
+
+###Model selection
+
+First of all we should estimate if lenear models may be applied here or not. To do it we calculate correlations between each remaining feature to the response.
+
+```{r, echo=TRUE}
+# calculate correlations
+cor_fn <- function(x) cor(x, as.numeric(training$classe))
+cor_v <- abs(sapply(training[, -ncol(training)], cor_fn))
+summary(cor_v)
+```
+
+The results show that that correlations are low.
+Thus linear regression model is not suitable in this case. Boosting classification trees and random forests algorithms is expected generate more accurate predictions for the data. Unfortunatelly I have old PC and because of memory space issue I cannot run random forest algorithm on this dataset. :( Thus I will check boosting and classification tree.
+
+To select the best algorithm let us split the data into test and train sets
+
+
+```{r, echo=TRUE}
+set.seed(as.numeric(as.Date("2015-09-25")))
+in_train <- createDataPartition(training$classe, p=0.6)
+trn <- training[in_train[[1]], ]
+tst <- training[-in_train[[1]], ]
+
+control <- trainControl(method = "cv", number = 5)
+```
+
+####Boosting
+
+Create boosting model, predict outcomes using validation set, print prediction results, plot accuracy of this model.
+ 
+```{r, echo=TRUE}
+fit_boost <- train(classe ~ ., method = "gbm", data = trn, 
+                  verbose = FALSE, 
+                  trControl = control)
+
+# predict outcomes using validation set
+predict_boost <- predict(fit_boost, tst)
+# Show prediction results
+conf_boost <- confusionMatrix(tst$classe, predict_boost)
+print(conf_boost)
+plot(fit_boost)
+```
+Thus the accuracy is about 95%. Sounds good. Let us look at classification tree.
+
+####Classification tree
+ 
+Create classification tree model, predict outcomes using validation set, print prediction results, draw tree and plot the accuracy.
+
+```{r}
+fit_rpart <- train(classe ~ ., data = trn, method = "rpart", 
+                   trControl = control)
+fancyRpartPlot(fit_rpart$finalModel)
+
+# predict outcomes using validation set
+predict_rpart <- predict(fit_rpart, tst)
+# Show prediction result
+conf_rpart <- confusionMatrix(tst$classe, predict_rpart)
+print(conf_rpart)
+plot(fit_rpart)
+```
+From the confusion matrix, we can conclude that using classification tree does not predict the outcome very well.
+
+##Final model and prediction
+
+Comparing model accuracy of the two models generated, classification tree and boosting, the last model has overall better accuracy. So, this model is used for prediction.
+
+Do the prediction ...
+
+```{r}
+# final model
+rfFit$finalModel
+# prediction
+prediction <- as.character(predict(fit_boost, validation))
+print(prediction)
+```
+
+and generate output results for automatic grading script.
+
+```{r}
+# write prediction files
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("./prediction/problem_id_", i, ".txt")
+    write.table(x[i], file = filename, quote = FALSE, row.names = FALSE, col.names = FALSE)
+  }
+}
+pml_write_files(prediction)
+```
