@@ -2,7 +2,9 @@
 title: "Coursera Practical Machine Learning Project"
 author: "Vadim Galenchik"
 date: "Saturday, Septenber 25, 2015"
-output: html_document
+output:
+  html_document:
+    keep_md: yes
 ---
 
 ##Background and Introduction
@@ -21,7 +23,7 @@ Read more: http://groupware.les.inf.puc-rio.br/har#wle_paper_section#ixzz3my7131
 ###Import the data
 
 After loading of the R packages needed for analysis we download the training and testing data sets from the given URLs.
-```{r, echo=FALSE}
+```{r, echo=FALSE, warning=FALSE, results='hide', error=FALSE, message=FALSE}
 library(caret)
 library(ggplot2)
 library(plyr)
@@ -33,8 +35,10 @@ library(randomForest)
 library(repmis)
 ```
 ```{r, echo=TRUE}
-#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",  destfile = "pml-testing.csv")
-#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
+setInternet2(TRUE)
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv")
+
+download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv")
 
 validation <- read.csv("pml-testing.csv")
 training <- read.csv("pml-training.csv")
@@ -56,7 +60,7 @@ nav <- sapply(training, check_missing)
 training <- training[, !nav]
 ```
 Because of their nature variables "X" ,"user_name","raw_timestamp_part_1", 
-#"raw_timestamp_part_2",  "cvtd_timestamp", "num_window" cannnot be considered as predictors. So let's removw them.
+"raw_timestamp_part_2",  "cvtd_timestamp", "num_window" cannnot be considered as predictors. So let's removw them.
 
 ```{r, echo=TRUE}
 training <- training[, -c(1:6)]
@@ -73,8 +77,8 @@ cor_v <- abs(sapply(training[, -ncol(training)], cor_fn))
 summary(cor_v)
 ```
 
-The results show that that correlations are low.
-Thus linear regression model is not suitable in this case. Boosting classification trees and random forests algorithms is expected generate more accurate predictions for the data. Unfortunatelly I have old PC and because of memory space issue I cannot run random forest algorithm on this dataset. :( Thus I will check boosting and classification tree.
+The results show that that the correlations are low.
+Thus linear regression model is not suitable in this case. Boosting, classification trees and random forests algorithms are expected to generate more accurate predictions for the data. Unfortunatelly I have old PC and because of memory space issue I cannot run random forest algorithm on this dataset. :( Thus I will check boosting and classification tree.
 
 To select the best algorithm let us split the data into test and train sets
 
@@ -104,6 +108,7 @@ conf_boost <- confusionMatrix(tst$classe, predict_boost)
 print(conf_boost)
 plot(fit_boost)
 ```
+
 Thus the accuracy is about 95%. Sounds good. Let us look at classification tree.
 
 ####Classification tree
@@ -122,6 +127,7 @@ conf_rpart <- confusionMatrix(tst$classe, predict_rpart)
 print(conf_rpart)
 plot(fit_rpart)
 ```
+
 From the confusion matrix, we can conclude that using classification tree does not predict the outcome very well.
 
 ##Final model and prediction
@@ -131,14 +137,12 @@ Comparing model accuracy of the two models generated, classification tree and bo
 Do the prediction ...
 
 ```{r}
-# final model
-rfFit$finalModel
 # prediction
 prediction <- as.character(predict(fit_boost, validation))
 print(prediction)
 ```
 
-and generate output results for automatic grading script.
+... and generate output results for automatic grading script.
 
 ```{r}
 # write prediction files
